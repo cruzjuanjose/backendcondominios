@@ -1,0 +1,579 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Casa_condominio {
+  identificador  Decimal? @db.Decimal(10, 0)
+  Nombre         String?  @db.VarChar(100)
+  Tipo_propiedad String?  @db.VarChar(100)
+  Status         String?  @db.VarChar(100)
+  id_contacto    Decimal  @db.Decimal(10, 0)
+  Saldo          Decimal  @db.Decimal(10, 0)
+  Atraso         Decimal? @db.Decimal(10, 0)
+
+  @@ignore
+}
+
+model assignment_type {
+  assignment_type_id BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  code               String               @unique(map: "code") @db.VarChar(50)
+  name               String               @db.VarChar(100)
+  subproperty_person subproperty_person[]
+}
+
+model bank_account {
+  bank_account_id       BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  bank_name             String                  @db.VarChar(200)
+  account_number        String                  @db.VarChar(100)
+  country_id            BigInt?                 @db.UnsignedBigInt
+  created_at            DateTime                @default(now()) @db.DateTime(0)
+  country               country?                @relation(fields: [country_id], references: [country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_bank_country")
+  property_bank_account property_bank_account[]
+  provider_bank_account provider_bank_account[]
+
+  @@unique([bank_name, account_number, country_id], map: "uq_bank_account")
+  @@index([country_id], map: "fk_bank_country")
+}
+
+model country {
+  country_id       BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  name             String             @db.VarChar(100)
+  iso_code         String?            @db.VarChar(10)
+  bank_account     bank_account[]
+  person           person[]
+  property         property[]
+  provider         provider[]
+  service_contract service_contract[]
+}
+
+model maintenance {
+  maintenance_id      BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  property_item_id    BigInt                @db.UnsignedBigInt
+  provider_id         BigInt                @db.UnsignedBigInt
+  description         String?               @db.Text
+  start_date          DateTime              @db.Date
+  end_date            DateTime?             @db.Date
+  status              String                @default("PLANNED") @db.VarChar(30)
+  property_item       property_item         @relation(fields: [property_item_id], references: [property_item_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maint_item")
+  provider            provider              @relation(fields: [provider_id], references: [provider_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_maint_provider")
+  maintenance_payment maintenance_payment[]
+
+  @@index([property_item_id], map: "fk_maint_item")
+  @@index([provider_id], map: "fk_maint_provider")
+}
+
+model maintenance_payment {
+  maintenance_payment_id   BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  maintenance_id           BigInt                @db.UnsignedBigInt
+  receipt_detail_id        BigInt                @db.UnsignedBigInt
+  provider_bank_account_id BigInt                @db.UnsignedBigInt
+  amount                   Decimal               @db.Decimal(14, 2)
+  maintenance              maintenance           @relation(fields: [maintenance_id], references: [maintenance_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_mp_maintenance")
+  provider_bank_account    provider_bank_account @relation(fields: [provider_bank_account_id], references: [provider_bank_account_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_mp_pba")
+  receipt_detail           receipt_detail        @relation(fields: [receipt_detail_id], references: [receipt_detail_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_mp_receipt_detail")
+
+  @@index([maintenance_id], map: "fk_mp_maintenance")
+  @@index([provider_bank_account_id], map: "fk_mp_pba")
+  @@index([receipt_detail_id], map: "fk_mp_receipt_detail")
+}
+
+model payment_order {
+  payment_order_id           BigInt                  @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id                BigInt                  @db.UnsignedBigInt
+  subproperty_id             BigInt                  @db.UnsignedBigInt
+  property_payment_config_id BigInt                  @db.UnsignedBigInt
+  period_start_date          DateTime                @db.Date
+  period_end_date            DateTime                @db.Date
+  generation_date            DateTime                @db.Date
+  due_date                   DateTime                @db.Date
+  status                     String                  @default("PENDING") @db.VarChar(30)
+  total_amount               Decimal                 @db.Decimal(14, 2)
+  created_at                 DateTime                @default(now()) @db.DateTime(0)
+  property_payment_config    property_payment_config @relation(fields: [property_payment_config_id], references: [property_payment_config_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_po_ppc")
+  property                   property                @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_po_property")
+  subproperty                subproperty             @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_po_subproperty")
+  payment_order_person       payment_order_person[]
+  receipt_detail             receipt_detail[]
+
+  @@index([property_payment_config_id], map: "fk_po_ppc")
+  @@index([property_id], map: "idx_po_property")
+  @@index([subproperty_id], map: "idx_po_subproperty")
+}
+
+model payment_order_person {
+  payment_order_person_id   BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  payment_order_id          BigInt        @db.UnsignedBigInt
+  person_id                 BigInt        @db.UnsignedBigInt
+  responsibility_percentage Decimal?      @db.Decimal(5, 2)
+  person                    person        @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pop_person")
+  payment_order             payment_order @relation(fields: [payment_order_id], references: [payment_order_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_pop_po")
+
+  @@index([person_id], map: "fk_pop_person")
+  @@index([payment_order_id], map: "fk_pop_po")
+}
+
+model payment_type {
+  payment_type_id         BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  code                    String                    @unique(map: "code") @db.VarChar(50)
+  name                    String                    @db.VarChar(100)
+  property_payment_config property_payment_config[]
+  receipt_detail          receipt_detail[]
+}
+
+model permission_type {
+  permission_type_id BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  code               String            @unique(map: "code") @db.VarChar(50)
+  name               String            @db.VarChar(100)
+  role_permission    role_permission[]
+}
+
+model person {
+  person_id                                         BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  first_name                                        String                    @db.VarChar(100)
+  last_name                                         String                    @db.VarChar(100)
+  birth_date                                        DateTime?                 @db.Date
+  dpi                                               String?                   @unique(map: "dpi") @db.VarChar(50)
+  country_id                                        BigInt?                   @db.UnsignedBigInt
+  notes                                             String?                   @db.Text
+  created_at                                        DateTime                  @default(now()) @db.DateTime(0)
+  updated_at                                        DateTime                  @default(now()) @db.DateTime(0)
+  payment_order_person                              payment_order_person[]
+  country                                           country?                  @relation(fields: [country_id], references: [country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_person_country")
+  person_email                                      person_email[]
+  person_phone                                      person_phone[]
+  receipt                                           receipt[]
+  service_contract_person                           service_contract_person[]
+  subproperty_person                                subproperty_person[]
+  user_account                                      user_account[]
+  vehicle                                           vehicle[]
+  visit_visit_authorized_resident_person_idToperson visit[]                   @relation("visit_authorized_resident_person_idToperson")
+  visit_visit_authorized_staff_person_idToperson    visit[]                   @relation("visit_authorized_staff_person_idToperson")
+
+  @@index([country_id], map: "idx_person_country")
+}
+
+model person_email {
+  person_email_id BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  person_id       BigInt  @db.UnsignedBigInt
+  email           String  @db.VarChar(200)
+  is_primary      Boolean @default(false)
+  person          person  @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_person_email_person")
+
+  @@index([person_id], map: "fk_person_email_person")
+}
+
+model person_phone {
+  person_phone_id BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  person_id       BigInt  @db.UnsignedBigInt
+  phone_type      String? @db.VarChar(50)
+  country_code    String? @db.VarChar(10)
+  phone_number    String  @db.VarChar(50)
+  is_primary      Boolean @default(false)
+  person          person  @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_person_phone_person")
+
+  @@index([person_id], map: "fk_person_phone_person")
+}
+
+model property {
+  property_id             BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  property_type_id        BigInt                    @db.UnsignedBigInt
+  name                    String                    @db.VarChar(150)
+  address_line1           String                    @db.VarChar(200)
+  address_line2           String?                   @db.VarChar(200)
+  city                    String?                   @db.VarChar(100)
+  state                   String?                   @db.VarChar(100)
+  postal_code             String?                   @db.VarChar(20)
+  country_id              BigInt                    @db.UnsignedBigInt
+  status                  String                    @default("ACTIVE") @db.VarChar(30)
+  created_at              DateTime                  @default(now()) @db.DateTime(0)
+  updated_at              DateTime                  @default(now()) @db.DateTime(0)
+  payment_order           payment_order[]
+  country                 country                   @relation(fields: [country_id], references: [country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_property_country")
+  property_type           property_type             @relation(fields: [property_type_id], references: [property_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_property_type")
+  property_bank_account   property_bank_account[]
+  property_item           property_item[]
+  property_payment_config property_payment_config[]
+  receipt                 receipt[]
+  service_contract        service_contract[]
+  subproperty             subproperty[]
+  user_property_role      user_property_role[]
+  visit                   visit[]
+
+  @@index([country_id], map: "fk_property_country")
+  @@index([property_type_id], map: "fk_property_type")
+}
+
+model property_bank_account {
+  property_bank_account_id BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id              BigInt       @db.UnsignedBigInt
+  bank_account_id          BigInt       @db.UnsignedBigInt
+  bank_account             bank_account @relation(fields: [bank_account_id], references: [bank_account_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pba_bank")
+  property                 property     @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_pba_property")
+  receipt                  receipt[]
+
+  @@unique([property_id, bank_account_id], map: "uq_property_bank")
+  @@index([bank_account_id], map: "fk_pba_bank")
+}
+
+model property_item {
+  property_item_id      BigInt             @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id           BigInt             @db.UnsignedBigInt
+  property_item_type_id BigInt             @db.UnsignedBigInt
+  name                  String             @db.VarChar(150)
+  location_description  String?            @db.Text
+  status                String             @default("ACTIVE") @db.VarChar(30)
+  created_at            DateTime           @default(now()) @db.DateTime(0)
+  maintenance           maintenance[]
+  property              property           @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pi_property")
+  property_item_type    property_item_type @relation(fields: [property_item_type_id], references: [property_item_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pi_type")
+  subproperty_item      subproperty_item[]
+  visit                 visit[]
+
+  @@index([property_id], map: "fk_pi_property")
+  @@index([property_item_type_id], map: "fk_pi_type")
+}
+
+model property_item_type {
+  property_item_type_id BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  code                  String          @unique(map: "code") @db.VarChar(50)
+  name                  String          @db.VarChar(100)
+  property_item         property_item[]
+}
+
+model property_payment_config {
+  property_payment_config_id BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id                BigInt          @db.UnsignedBigInt
+  payment_type_id            BigInt          @db.UnsignedBigInt
+  description                String?         @db.VarChar(200)
+  default_amount             Decimal?        @db.Decimal(14, 2)
+  start_date                 DateTime        @db.Date
+  end_date                   DateTime?       @db.Date
+  status                     String          @default("ACTIVE") @db.VarChar(30)
+  payment_order              payment_order[]
+  payment_type               payment_type    @relation(fields: [payment_type_id], references: [payment_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ppc_payment_type")
+  property                   property        @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_ppc_property")
+
+  @@unique([property_id, payment_type_id, start_date], map: "uq_property_payment_type")
+  @@index([payment_type_id], map: "fk_ppc_payment_type")
+}
+
+model property_type {
+  property_type_id BigInt     @id @default(autoincrement()) @db.UnsignedBigInt
+  code             String     @unique(map: "code") @db.VarChar(50)
+  name             String     @db.VarChar(100)
+  property         property[]
+}
+
+model provider {
+  provider_id                BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  name                       String                       @db.VarChar(200)
+  address_line1              String?                      @db.VarChar(200)
+  address_line2              String?                      @db.VarChar(200)
+  city                       String?                      @db.VarChar(100)
+  state                      String?                      @db.VarChar(100)
+  postal_code                String?                      @db.VarChar(20)
+  country_id                 BigInt?                      @db.UnsignedBigInt
+  tax_id                     String?                      @db.VarChar(50)
+  status                     String                       @default("ACTIVE") @db.VarChar(30)
+  maintenance                maintenance[]
+  country                    country?                     @relation(fields: [country_id], references: [country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_provider_country")
+  provider_bank_account      provider_bank_account[]
+  provider_provider_category provider_provider_category[]
+  service_contract           service_contract[]
+
+  @@index([country_id], map: "fk_provider_country")
+}
+
+model provider_bank_account {
+  provider_bank_account_id BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  provider_id              BigInt                @db.UnsignedBigInt
+  bank_account_id          BigInt                @db.UnsignedBigInt
+  maintenance_payment      maintenance_payment[]
+  bank_account             bank_account          @relation(fields: [bank_account_id], references: [bank_account_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pba_bank_acc")
+  provider                 provider              @relation(fields: [provider_id], references: [provider_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_pba_provider")
+
+  @@unique([provider_id, bank_account_id], map: "uq_provider_bank")
+  @@index([bank_account_id], map: "fk_pba_bank_acc")
+}
+
+model provider_category {
+  provider_category_id       BigInt                       @id @default(autoincrement()) @db.UnsignedBigInt
+  code                       String                       @unique(map: "code") @db.VarChar(50)
+  name                       String                       @db.VarChar(100)
+  provider_provider_category provider_provider_category[]
+}
+
+model provider_provider_category {
+  provider_id          BigInt            @db.UnsignedBigInt
+  provider_category_id BigInt            @db.UnsignedBigInt
+  provider_category    provider_category @relation(fields: [provider_category_id], references: [provider_category_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ppc_category")
+  provider             provider          @relation(fields: [provider_id], references: [provider_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_ppc_provider")
+
+  @@id([provider_id, provider_category_id])
+  @@index([provider_category_id], map: "fk_ppc_category")
+}
+
+model receipt {
+  receipt_id               BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id              BigInt                @db.UnsignedBigInt
+  subproperty_id           BigInt                @db.UnsignedBigInt
+  payer_person_id          BigInt?               @db.UnsignedBigInt
+  property_bank_account_id BigInt                @db.UnsignedBigInt
+  receipt_date             DateTime              @db.Date
+  status                   String                @default("REGISTERED") @db.VarChar(30)
+  total_amount             Decimal               @db.Decimal(14, 2)
+  reference_number         String?               @db.VarChar(100)
+  created_at               DateTime              @default(now()) @db.DateTime(0)
+  person                   person?               @relation(fields: [payer_person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_receipt_payer")
+  property_bank_account    property_bank_account @relation(fields: [property_bank_account_id], references: [property_bank_account_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_receipt_pba")
+  property                 property              @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_receipt_property")
+  subproperty              subproperty           @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_receipt_subproperty")
+  receipt_detail           receipt_detail[]
+
+  @@index([payer_person_id], map: "fk_receipt_payer")
+  @@index([property_bank_account_id], map: "fk_receipt_pba")
+  @@index([property_id], map: "idx_receipt_property")
+  @@index([subproperty_id], map: "idx_receipt_subproperty")
+}
+
+model receipt_detail {
+  receipt_detail_id   BigInt                @id @default(autoincrement()) @db.UnsignedBigInt
+  receipt_id          BigInt                @db.UnsignedBigInt
+  payment_order_id    BigInt?               @db.UnsignedBigInt
+  payment_type_id     BigInt                @db.UnsignedBigInt
+  amount              Decimal               @db.Decimal(14, 2)
+  maintenance_payment maintenance_payment[]
+  payment_type        payment_type          @relation(fields: [payment_type_id], references: [payment_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rd_payment_type")
+  payment_order       payment_order?        @relation(fields: [payment_order_id], references: [payment_order_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rd_po")
+  receipt             receipt               @relation(fields: [receipt_id], references: [receipt_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_rd_receipt")
+
+  @@index([payment_type_id], map: "fk_rd_payment_type")
+  @@index([payment_order_id], map: "fk_rd_po")
+  @@index([receipt_id], map: "fk_rd_receipt")
+}
+
+model role {
+  role_id            BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  code               String               @unique(map: "code") @db.VarChar(50)
+  name               String               @db.VarChar(100)
+  role_permission    role_permission[]
+  user_property_role user_property_role[]
+}
+
+model role_permission {
+  role_permission_id BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  role_id            BigInt          @db.UnsignedBigInt
+  screen_id          BigInt          @db.UnsignedBigInt
+  permission_type_id BigInt          @db.UnsignedBigInt
+  permission_type    permission_type @relation(fields: [permission_type_id], references: [permission_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rp_perm_type")
+  role               role            @relation(fields: [role_id], references: [role_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_rp_role")
+  screen             screen          @relation(fields: [screen_id], references: [screen_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_rp_screen")
+
+  @@unique([role_id, screen_id, permission_type_id], map: "uq_role_screen_perm")
+  @@index([permission_type_id], map: "fk_rp_perm_type")
+  @@index([screen_id], map: "fk_rp_screen")
+}
+
+model screen {
+  screen_id       BigInt            @id @default(autoincrement()) @db.UnsignedBigInt
+  code            String            @unique(map: "code") @db.VarChar(100)
+  name            String            @db.VarChar(150)
+  role_permission role_permission[]
+}
+
+model service_contract {
+  service_contract_id     BigInt                    @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id             BigInt                    @db.UnsignedBigInt
+  provider_id             BigInt                    @db.UnsignedBigInt
+  contract_name           String                    @db.VarChar(200)
+  contract_number         String?                   @db.VarChar(100)
+  terms_text              String?                   @db.Text
+  start_date              DateTime                  @db.Date
+  end_date                DateTime?                 @db.Date
+  status                  String                    @default("ACTIVE") @db.VarChar(30)
+  contract_country_id     BigInt?                   @db.UnsignedBigInt
+  country                 country?                  @relation(fields: [contract_country_id], references: [country_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sc_country")
+  property                property                  @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sc_property")
+  provider                provider                  @relation(fields: [provider_id], references: [provider_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_sc_provider")
+  service_contract_person service_contract_person[]
+
+  @@index([contract_country_id], map: "fk_sc_country")
+  @@index([property_id], map: "idx_sc_property")
+  @@index([provider_id], map: "idx_sc_provider")
+}
+
+model service_contract_person {
+  service_contract_person_id BigInt           @id @default(autoincrement()) @db.UnsignedBigInt
+  service_contract_id        BigInt           @db.UnsignedBigInt
+  person_id                  BigInt           @db.UnsignedBigInt
+  role_in_contract           String?          @db.VarChar(100)
+  start_date                 DateTime         @db.Date
+  end_date                   DateTime?        @db.Date
+  is_active                  Boolean          @default(true)
+  person                     person           @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_scp_person")
+  service_contract           service_contract @relation(fields: [service_contract_id], references: [service_contract_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_scp_sc")
+
+  @@index([person_id], map: "fk_scp_person")
+  @@index([service_contract_id], map: "fk_scp_sc")
+}
+
+model subproperty {
+  subproperty_id      BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id         BigInt               @db.UnsignedBigInt
+  subproperty_type_id BigInt               @db.UnsignedBigInt
+  code                String               @db.VarChar(100)
+  floor               String?              @db.VarChar(50)
+  tower               String?              @db.VarChar(50)
+  area_m2             Decimal?             @db.Decimal(10, 2)
+  status              String               @default("ACTIVE") @db.VarChar(30)
+  created_at          DateTime             @default(now()) @db.DateTime(0)
+  updated_at          DateTime             @default(now()) @db.DateTime(0)
+  payment_order       payment_order[]
+  receipt             receipt[]
+  property            property             @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_subproperty_property")
+  subproperty_type    subproperty_type     @relation(fields: [subproperty_type_id], references: [subproperty_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_subproperty_type")
+  subproperty_item    subproperty_item[]
+  subproperty_person  subproperty_person[]
+  vehicle             vehicle[]
+  visit               visit[]
+
+  @@unique([property_id, code], map: "uq_subproperty_property_code")
+  @@index([subproperty_type_id], map: "fk_subproperty_type")
+  @@index([property_id], map: "idx_subproperty_property")
+}
+
+model subproperty_item {
+  subproperty_item_id BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  subproperty_id      BigInt        @db.UnsignedBigInt
+  property_item_id    BigInt        @db.UnsignedBigInt
+  assignment_type     String?       @db.VarChar(50)
+  property_item       property_item @relation(fields: [property_item_id], references: [property_item_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_spi_item")
+  subproperty         subproperty   @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_spi_subproperty")
+
+  @@index([property_item_id], map: "fk_spi_item")
+  @@index([subproperty_id], map: "fk_spi_subproperty")
+}
+
+model subproperty_person {
+  subproperty_person_id BigInt          @id @default(autoincrement()) @db.UnsignedBigInt
+  subproperty_id        BigInt          @db.UnsignedBigInt
+  person_id             BigInt          @db.UnsignedBigInt
+  assignment_type_id    BigInt          @db.UnsignedBigInt
+  start_date            DateTime        @db.Date
+  end_date              DateTime?       @db.Date
+  is_active             Boolean         @default(true)
+  assignment_type       assignment_type @relation(fields: [assignment_type_id], references: [assignment_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_subprop_person_assignt")
+  person                person          @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_subprop_person_person")
+  subproperty           subproperty     @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_subprop_person_subprop")
+
+  @@unique([subproperty_id, person_id, assignment_type_id, start_date], map: "uq_subproperty_person_active")
+  @@index([assignment_type_id], map: "fk_subprop_person_assignt")
+  @@index([person_id], map: "idx_sp_person_person")
+  @@index([subproperty_id], map: "idx_sp_person_subproperty")
+}
+
+model subproperty_type {
+  subproperty_type_id BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  code                String        @unique(map: "code") @db.VarChar(50)
+  name                String        @db.VarChar(100)
+  subproperty         subproperty[]
+}
+
+model user_account {
+  user_id            BigInt               @id @default(autoincrement()) @db.UnsignedBigInt
+  username           String               @unique(map: "username") @db.VarChar(100)
+  password_hash      String               @db.VarChar(255)
+  first_name         String               @db.VarChar(100)
+  last_name          String               @db.VarChar(100)
+  email              String?              @db.VarChar(200)
+  person_id          BigInt?              @db.UnsignedBigInt
+  is_active          Boolean              @default(true)
+  created_at         DateTime             @default(now()) @db.DateTime(0)
+  person             person?              @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_user_person")
+  user_property_role user_property_role[]
+
+  @@index([person_id], map: "fk_user_person")
+}
+
+model user_property_role {
+  user_property_role_id BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  user_id               BigInt       @db.UnsignedBigInt
+  property_id           BigInt       @db.UnsignedBigInt
+  role_id               BigInt       @db.UnsignedBigInt
+  property              property     @relation(fields: [property_id], references: [property_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_upr_property")
+  role                  role         @relation(fields: [role_id], references: [role_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_upr_role")
+  user_account          user_account @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction, map: "fk_upr_user")
+
+  @@unique([user_id, property_id, role_id], map: "uq_user_property_role")
+  @@index([property_id], map: "fk_upr_property")
+  @@index([role_id], map: "fk_upr_role")
+}
+
+model vehicle {
+  vehicle_id      BigInt       @id @default(autoincrement()) @db.UnsignedBigInt
+  vehicle_type_id BigInt       @db.UnsignedBigInt
+  plate           String       @unique(map: "uq_vehicle_plate") @db.VarChar(20)
+  brand           String?      @db.VarChar(100)
+  model           String?      @db.VarChar(100)
+  color           String?      @db.VarChar(50)
+  person_id       BigInt?      @db.UnsignedBigInt
+  subproperty_id  BigInt?      @db.UnsignedBigInt
+  created_at      DateTime     @default(now()) @db.DateTime(0)
+  person          person?      @relation(fields: [person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_vehicle_person")
+  subproperty     subproperty? @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_vehicle_subproperty")
+  vehicle_type    vehicle_type @relation(fields: [vehicle_type_id], references: [vehicle_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_vehicle_type")
+
+  @@index([person_id], map: "fk_vehicle_person")
+  @@index([subproperty_id], map: "fk_vehicle_subproperty")
+  @@index([vehicle_type_id], map: "fk_vehicle_type")
+}
+
+model vehicle_type {
+  vehicle_type_id BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  code            String    @unique(map: "code") @db.VarChar(50)
+  name            String    @db.VarChar(100)
+  vehicle         vehicle[]
+}
+
+model visit {
+  visit_id                                           BigInt        @id @default(autoincrement()) @db.UnsignedBigInt
+  property_id                                        BigInt        @db.UnsignedBigInt
+  subproperty_id                                     BigInt?       @db.UnsignedBigInt
+  property_item_id                                   BigInt        @db.UnsignedBigInt
+  visitor_name                                       String        @db.VarChar(200)
+  visitor_dpi                                        String?       @db.VarChar(50)
+  visit_type_id                                      BigInt        @db.UnsignedBigInt
+  entry_datetime                                     DateTime      @db.DateTime(0)
+  exit_datetime                                      DateTime?     @db.DateTime(0)
+  authorized_staff_person_id                         BigInt?       @db.UnsignedBigInt
+  authorized_resident_person_id                      BigInt?       @db.UnsignedBigInt
+  created_by_user_id                                 BigInt?       @db.UnsignedBigInt
+  created_at                                         DateTime      @default(now()) @db.DateTime(0)
+  property_item                                      property_item @relation(fields: [property_item_id], references: [property_item_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_item")
+  property                                           property      @relation(fields: [property_id], references: [property_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_property")
+  person_visit_authorized_resident_person_idToperson person?       @relation("visit_authorized_resident_person_idToperson", fields: [authorized_resident_person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_resident")
+  person_visit_authorized_staff_person_idToperson    person?       @relation("visit_authorized_staff_person_idToperson", fields: [authorized_staff_person_id], references: [person_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_staff")
+  subproperty                                        subproperty?  @relation(fields: [subproperty_id], references: [subproperty_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_subproperty")
+  visit_type                                         visit_type    @relation(fields: [visit_type_id], references: [visit_type_id], onDelete: NoAction, onUpdate: NoAction, map: "fk_visit_type")
+
+  @@index([authorized_resident_person_id], map: "fk_visit_resident")
+  @@index([authorized_staff_person_id], map: "fk_visit_staff")
+  @@index([visit_type_id], map: "fk_visit_type")
+  @@index([property_item_id], map: "idx_visit_item")
+  @@index([property_id], map: "idx_visit_property")
+  @@index([subproperty_id], map: "idx_visit_subproperty")
+}
+
+model visit_type {
+  visit_type_id BigInt  @id @default(autoincrement()) @db.UnsignedBigInt
+  code          String  @unique(map: "code") @db.VarChar(50)
+  name          String  @db.VarChar(100)
+  visit         visit[]
+}
